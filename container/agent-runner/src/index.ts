@@ -425,7 +425,7 @@ async function runQuery(
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
-        ...(containerInput.isMain && sdkEnv.ICLOUD_APPLE_ID && sdkEnv.ICLOUD_APP_PASSWORD
+        ...(sdkEnv.ICLOUD_APPLE_ID && sdkEnv.ICLOUD_APP_PASSWORD
           ? {
               icloud_calendar: {
                 command: 'node',

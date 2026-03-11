@@ -26,6 +26,7 @@ import {
   stopContainer,
 } from './container-runtime.js';
 import { detectAuthMode } from './credential-proxy.js';
+import { readEnvFile } from './env.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 
@@ -75,8 +76,10 @@ function buildVolumeMounts(
       containerPath: '/workspace/project',
       readonly: true,
     });
+  }
 
-    // iCloud calendar MCP server (main group only)
+  // iCloud calendar MCP server (main group + any group with calendarConfig)
+  if (isMain || group.calendarConfig) {
     const icloudMcpSrc = path.join(
       projectRoot,
       'container',
@@ -90,7 +93,9 @@ function buildVolumeMounts(
         readonly: true,
       });
     }
+  }
 
+  if (isMain) {
     // Image generation MCP server (main group only)
     const imageGenMcpSrc = path.join(
       projectRoot,
@@ -250,6 +255,8 @@ function buildVolumeMounts(
 function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
+  isMain: boolean,
+  group: RegisteredGroup,
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
@@ -272,6 +279,38 @@ function buildContainerArgs(
   } else {
     args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
   }
+
+  // Inject iCloud calendar credentials for main group and any group with calendarConfig
+  if (isMain || group.calendarConfig) {
+    const icloudSecrets = readEnvFile(['ICLOUD_APPLE_ID', 'ICLOUD_APP_PASSWORD']);
+    if (icloudSecrets.ICLOUD_APPLE_ID) {
+      args.push('-e', `ICLOUD_APPLE_ID=${icloudSecrets.ICLOUD_APPLE_ID}`);
+    }
+    if (icloudSecrets.ICLOUD_APP_PASSWORD) {
+      args.push('-e', `ICLOUD_APP_PASSWORD=${icloudSecrets.ICLOUD_APP_PASSWORD}`);
+    }
+  }
+  // Inject Gemini API key for main group only (image generation)
+  if (isMain) {
+    const geminiSecret = readEnvFile(['GEMINI_API_KEY']);
+    if (geminiSecret.GEMINI_API_KEY) {
+      args.push('-e', `GEMINI_API_KEY=${geminiSecret.GEMINI_API_KEY}`);
+    }
+  }
+
+  // Inject calendar access policy — read by the calendar-assistant skill.
+  // Stored in the host-side group registration, never writable from inside the container.
+  // Main group defaults to full access if no calendarConfig is set.
+  if (isMain && !group.calendarConfig) {
+    args.push('-e', 'NANOCLAW_ALLOWED_CALENDARS=*');
+  } else if (group.calendarConfig) {
+    const val =
+      group.calendarConfig.allowedCalendars === '*'
+        ? '*'
+        : group.calendarConfig.allowedCalendars.join(',');
+    args.push('-e', `NANOCLAW_ALLOWED_CALENDARS=${val}`);
+  }
+  // If neither: env var is absent → no calendar access (default for new groups)
 
   // Runtime-specific args for host gateway resolution
   args.push(...hostGatewayArgs());
@@ -316,7 +355,7 @@ export async function runContainerAgent(
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
-  const containerArgs = buildContainerArgs(mounts, containerName);
+  const containerArgs = buildContainerArgs(mounts, containerName, input.isMain, group);
 
   logger.debug(
     {

@@ -20,6 +20,21 @@ if (!APPLE_ID || !APP_PASSWORD) {
   process.exit(1);
 }
 
+// Calendar access policy: enforced at MCP server level (not just in skill instructions)
+// NANOCLAW_ALLOWED_CALENDARS: absent/empty = no access, "*" = all, "A,B" = named list
+const ALLOWED_CALENDARS_ENV = process.env.NANOCLAW_ALLOWED_CALENDARS ?? '';
+if (!ALLOWED_CALENDARS_ENV) {
+  process.stderr.write('[icloud-calendar] NANOCLAW_ALLOWED_CALENDARS not set — no calendar access granted\n');
+  process.exit(1);
+}
+const ALLOWED_ALL = ALLOWED_CALENDARS_ENV === '*';
+const ALLOWED_NAMES = ALLOWED_ALL ? null : new Set(ALLOWED_CALENDARS_ENV.split(',').map(s => s.trim()));
+
+function isCalendarAllowed(cal) {
+  if (ALLOWED_ALL) return true;
+  return ALLOWED_NAMES.has(cal.displayName);
+}
+
 // ---------- iCal parsing ----------
 
 function unescapeIcal(s) {
@@ -128,7 +143,7 @@ async function getClient() {
 async function getCalendars(force = false) {
   const client = await getClient();
   if (!_calendars || force) {
-    _calendars = await client.fetchCalendars();
+    _calendars = (await client.fetchCalendars()).filter(isCalendarAllowed);
   }
   return _calendars;
 }
