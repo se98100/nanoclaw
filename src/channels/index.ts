@@ -13,7 +13,10 @@ import { TelegramChannel } from './telegram.js';
 import { registerChannel } from './registry.js';
 
 if (TELEGRAM_BOT_TOKEN) {
-  registerChannel('telegram', (opts) => new TelegramChannel(TELEGRAM_BOT_TOKEN, opts));
+  registerChannel(
+    'telegram',
+    (opts) => new TelegramChannel(TELEGRAM_BOT_TOKEN, opts),
+  );
 }
 
 // whatsapp

@@ -273,6 +273,24 @@ Example: for a meeting at 14:00, schedule a task for 13:30 with `schedule_type: 
 - Example: User in Maldives (UTC+5) wants reminder at 12:00 local → schedule at "2026-03-09T07:00:00"
 - See `/workspace/group/calendar-watch/timezone-fix-notes.md` for detailed conversion guidelines
 
+### Calendar access for other groups
+
+Calendar access is controlled per-group via `calendarConfig` in the group's registration. It is injected as the `NANOCLAW_ALLOWED_CALENDARS` env var at container startup — groups cannot change it themselves.
+
+To grant a group access to specific calendars, update their registration in the database:
+
+```json
+{
+  "calendarConfig": {
+    "allowedCalendars": ["Famiglia"]
+  }
+}
+```
+
+Use `"allowedCalendars": "*"` for full access (main group default). Omit `calendarConfig` entirely to deny all calendar access (default for new groups).
+
+To set this at registration time, pass `calendarConfig` when calling `mcp__nanoclaw__register_group`. To change it later, the admin must update the `registered_groups` table in SQLite directly from the host (outside the container).
+
 ### Proactive calendar monitoring (Calendar Assistant skill)
 
 You have a `calendar-assistant` skill that watches the calendar and acts as a proactive PA:

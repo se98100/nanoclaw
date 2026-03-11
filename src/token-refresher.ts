@@ -13,7 +13,11 @@ import path from 'path';
 
 import { logger } from './logger.js';
 
-const CREDENTIALS_FILE = path.join(os.homedir(), '.claude', '.credentials.json');
+const CREDENTIALS_FILE = path.join(
+  os.homedir(),
+  '.claude',
+  '.credentials.json',
+);
 const TOKEN_URL = 'https://platform.claude.com/v1/oauth/token';
 const CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
 
@@ -36,7 +40,9 @@ interface ClaudeCredentials {
 
 function readCredentials(): ClaudeCredentials | null {
   try {
-    return JSON.parse(fs.readFileSync(CREDENTIALS_FILE, 'utf-8')) as ClaudeCredentials;
+    return JSON.parse(
+      fs.readFileSync(CREDENTIALS_FILE, 'utf-8'),
+    ) as ClaudeCredentials;
   } catch {
     return null;
   }
@@ -46,7 +52,9 @@ function writeCredentials(creds: ClaudeCredentials): void {
   fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(creds, null, 2), 'utf-8');
 }
 
-async function refreshToken(refreshToken: string): Promise<{ accessToken: string; refreshToken?: string; expiresAt: number }> {
+async function refreshToken(
+  refreshToken: string,
+): Promise<{ accessToken: string; refreshToken?: string; expiresAt: number }> {
   const body = {
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
@@ -61,7 +69,9 @@ async function refreshToken(refreshToken: string): Promise<{ accessToken: string
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`Token refresh failed: ${res.status} ${res.statusText} – ${body}`);
+    throw new Error(
+      `Token refresh failed: ${res.status} ${res.statusText} – ${body}`,
+    );
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -69,7 +79,8 @@ async function refreshToken(refreshToken: string): Promise<{ accessToken: string
 
   const accessToken: string = data.access_token;
   // expires_in is in seconds; fall back to 8 hours if not provided
-  const expiresIn: number = typeof data.expires_in === 'number' ? data.expires_in : 8 * 3600;
+  const expiresIn: number =
+    typeof data.expires_in === 'number' ? data.expires_in : 8 * 3600;
   const expiresAt = Date.now() + expiresIn * 1000;
   // Some OAuth servers rotate the refresh token on each use — save the new one if provided
   const newRefreshToken: string | undefined = data.refresh_token;
@@ -91,7 +102,11 @@ async function maybeRefresh(): Promise<void> {
   );
 
   try {
-    const { accessToken, refreshToken: newRefreshToken, expiresAt } = await refreshToken(oauth.refreshToken);
+    const {
+      accessToken,
+      refreshToken: newRefreshToken,
+      expiresAt,
+    } = await refreshToken(oauth.refreshToken);
     creds!.claudeAiOauth!.accessToken = accessToken;
     if (newRefreshToken) creds!.claudeAiOauth!.refreshToken = newRefreshToken;
     creds!.claudeAiOauth!.expiresAt = expiresAt;
@@ -111,8 +126,12 @@ async function maybeRefresh(): Promise<void> {
  * refreshed before the first container launch.
  */
 export function startTokenRefresher(): void {
-  maybeRefresh().catch((err) => logger.error({ err }, 'Initial token refresh check failed'));
+  maybeRefresh().catch((err) =>
+    logger.error({ err }, 'Initial token refresh check failed'),
+  );
   setInterval(() => {
-    maybeRefresh().catch((err) => logger.error({ err }, 'Token refresh check failed'));
+    maybeRefresh().catch((err) =>
+      logger.error({ err }, 'Token refresh check failed'),
+    );
   }, CHECK_INTERVAL_MS);
 }

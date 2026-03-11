@@ -282,12 +282,18 @@ function buildContainerArgs(
 
   // Inject iCloud calendar credentials for main group and any group with calendarConfig
   if (isMain || group.calendarConfig) {
-    const icloudSecrets = readEnvFile(['ICLOUD_APPLE_ID', 'ICLOUD_APP_PASSWORD']);
+    const icloudSecrets = readEnvFile([
+      'ICLOUD_APPLE_ID',
+      'ICLOUD_APP_PASSWORD',
+    ]);
     if (icloudSecrets.ICLOUD_APPLE_ID) {
       args.push('-e', `ICLOUD_APPLE_ID=${icloudSecrets.ICLOUD_APPLE_ID}`);
     }
     if (icloudSecrets.ICLOUD_APP_PASSWORD) {
-      args.push('-e', `ICLOUD_APP_PASSWORD=${icloudSecrets.ICLOUD_APP_PASSWORD}`);
+      args.push(
+        '-e',
+        `ICLOUD_APP_PASSWORD=${icloudSecrets.ICLOUD_APP_PASSWORD}`,
+      );
     }
   }
   // Inject Gemini API key for main group only (image generation)
@@ -355,7 +361,12 @@ export async function runContainerAgent(
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
-  const containerArgs = buildContainerArgs(mounts, containerName, input.isMain, group);
+  const containerArgs = buildContainerArgs(
+    mounts,
+    containerName,
+    input.isMain,
+    group,
+  );
 
   logger.debug(
     {

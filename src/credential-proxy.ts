@@ -10,6 +10,9 @@
  *             Proxy injects real OAuth token on that exchange request;
  *             subsequent requests carry the temp key which is valid as-is.
  */
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { createServer, Server } from 'http';
 import { request as httpsRequest } from 'https';
 import { request as httpRequest, RequestOptions } from 'http';
@@ -21,6 +24,21 @@ export type AuthMode = 'api-key' | 'oauth';
 
 export interface ProxyConfig {
   authMode: AuthMode;
+}
+
+/** Read the current OAuth token — credentials.json (kept fresh by token-refresher) wins over .env */
+function readCurrentOauthToken(
+  envSecrets: Record<string, string>,
+): string | undefined {
+  try {
+    const credsFile = path.join(os.homedir(), '.claude', '.credentials.json');
+    const creds = JSON.parse(fs.readFileSync(credsFile, 'utf-8'));
+    const token = creds?.claudeAiOauth?.accessToken;
+    if (token) return token;
+  } catch {
+    // fall through to .env value
+  }
+  return envSecrets.CLAUDE_CODE_OAUTH_TOKEN || envSecrets.ANTHROPIC_AUTH_TOKEN;
 }
 
 export function startCredentialProxy(
@@ -35,8 +53,6 @@ export function startCredentialProxy(
   ]);
 
   const authMode: AuthMode = secrets.ANTHROPIC_API_KEY ? 'api-key' : 'oauth';
-  const oauthToken =
-    secrets.CLAUDE_CODE_OAUTH_TOKEN || secrets.ANTHROPIC_AUTH_TOKEN;
 
   const upstreamUrl = new URL(
     secrets.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
@@ -71,7 +87,9 @@ export function startCredentialProxy(
           // only when the container actually sends an Authorization header
           // (exchange request + auth probes). Post-exchange requests use
           // x-api-key only, so they pass through without token injection.
+          // Token is read dynamically so the token-refresher's updates take effect.
           if (headers['authorization']) {
+            const oauthToken = readCurrentOauthToken(secrets);
             delete headers['authorization'];
             if (oauthToken) {
               headers['authorization'] = `Bearer ${oauthToken}`;

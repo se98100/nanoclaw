@@ -34,6 +34,7 @@ export class TelegramChannel implements Channel {
 
     // Command to get chat ID (useful for registration)
     this.bot.command('chatid', (ctx) => {
+      logger.error('chatid received');
       const chatId = ctx.chat.id;
       const chatType = ctx.chat.type;
       const chatName =
@@ -182,13 +183,21 @@ export class TelegramChannel implements Channel {
         'Unknown';
       const isGroup =
         ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        undefined,
+        'telegram',
+        isGroup,
+      );
 
       let content = '[Voice message]';
       try {
-        const fileId =
-          ctx.message.voice?.file_id || ctx.message.audio?.file_id;
-        const mimeType = ctx.message.voice?.mime_type || ctx.message.audio?.mime_type || 'audio/ogg';
+        const fileId = ctx.message.voice?.file_id || ctx.message.audio?.file_id;
+        const mimeType =
+          ctx.message.voice?.mime_type ||
+          ctx.message.audio?.mime_type ||
+          'audio/ogg';
         if (fileId) {
           const file = await this.bot!.api.getFile(fileId);
           const filePath = file.file_path;

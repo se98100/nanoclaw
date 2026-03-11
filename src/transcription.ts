@@ -59,7 +59,10 @@ export async function transcribeAudio(
     }
 
     const transcript = (await response.text()).trim();
-    logger.info({ chars: transcript.length }, 'Voice message transcribed via Groq');
+    logger.info(
+      { chars: transcript.length },
+      'Voice message transcribed via Groq',
+    );
     return transcript;
   } catch (err) {
     logger.error({ err }, 'Groq transcription failed');

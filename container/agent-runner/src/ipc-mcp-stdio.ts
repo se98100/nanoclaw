@@ -307,6 +307,9 @@ Use available_groups.json to find the JID for a group. The folder name must be c
     name: z.string().describe('Display name for the group'),
     folder: z.string().describe('Channel-prefixed folder name (e.g., "whatsapp_family-chat", "telegram_dev-team")'),
     trigger: z.string().describe('Trigger word (e.g., "@Andy")'),
+    calendarConfig: z.object({
+      allowedCalendars: z.union([z.literal('*'), z.array(z.string())]),
+    }).optional().describe('Calendar access policy. "*" = all calendars, string[] = allowed calendar names by exact name, omit = no access (default)'),
   },
   async (args) => {
     if (!isMain) {
@@ -322,6 +325,7 @@ Use available_groups.json to find the JID for a group. The folder name must be c
       name: args.name,
       folder: args.folder,
       trigger: args.trigger,
+      calendarConfig: args.calendarConfig,
       timestamp: new Date().toISOString(),
     };
 

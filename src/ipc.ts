@@ -196,13 +196,14 @@ export async function processTaskIpc(
     groupFolder?: string;
     chatJid?: string;
     targetJid?: string;
-    // For register_group
+    // For register_group / update_group
     jid?: string;
     name?: string;
     folder?: string;
     trigger?: string;
     requiresTrigger?: boolean;
     containerConfig?: RegisteredGroup['containerConfig'];
+    calendarConfig?: RegisteredGroup['calendarConfig'];
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -471,6 +472,7 @@ export async function processTaskIpc(
           trigger: data.trigger,
           added_at: new Date().toISOString(),
           containerConfig: data.containerConfig,
+          calendarConfig: data.calendarConfig,
           requiresTrigger: data.requiresTrigger,
         });
       } else {

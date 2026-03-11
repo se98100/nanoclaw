@@ -32,12 +32,18 @@ export interface ContainerConfig {
   timeout?: number; // Default: 300000 (5 minutes)
 }
 
+export interface CalendarConfig {
+  // "*" = all calendars (main group), string[] = allowed calendar names, absent/null = no access
+  allowedCalendars: '*' | string[];
+}
+
 export interface RegisteredGroup {
   name: string;
   folder: string;
   trigger: string;
   added_at: string;
   containerConfig?: ContainerConfig;
+  calendarConfig?: CalendarConfig;
   requiresTrigger?: boolean; // Default: true for groups, false for solo chats
   isMain?: boolean; // True for the main control group (no trigger, elevated privileges)
 }
