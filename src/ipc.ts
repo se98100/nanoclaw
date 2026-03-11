@@ -91,16 +91,28 @@ export function startIpcWatcher(deps: IpcDeps): void {
                     'Unauthorized IPC message attempt blocked',
                   );
                 }
-              } else if (data.type === 'send_image' && data.chatJid && data.imageFile) {
+              } else if (
+                data.type === 'send_image' &&
+                data.chatJid &&
+                data.imageFile
+              ) {
                 const targetGroup = registeredGroups[data.chatJid];
                 if (
                   isMain ||
                   (targetGroup && targetGroup.folder === sourceGroup)
                 ) {
-                  const imagePath = path.join(ipcBaseDir, sourceGroup, 'images', data.imageFile);
+                  const imagePath = path.join(
+                    ipcBaseDir,
+                    sourceGroup,
+                    'images',
+                    data.imageFile,
+                  );
                   try {
                     await deps.sendImage(data.chatJid, imagePath);
-                    logger.info({ chatJid: data.chatJid, sourceGroup }, 'IPC image sent');
+                    logger.info(
+                      { chatJid: data.chatJid, sourceGroup },
+                      'IPC image sent',
+                    );
                   } finally {
                     fs.unlink(imagePath, () => {});
                   }

@@ -76,7 +76,12 @@ function buildVolumeMounts(
     });
 
     // iCloud calendar MCP server (main group only)
-    const icloudMcpSrc = path.join(projectRoot, 'container', 'mcp-servers', 'icloud-calendar');
+    const icloudMcpSrc = path.join(
+      projectRoot,
+      'container',
+      'mcp-servers',
+      'icloud-calendar',
+    );
     if (fs.existsSync(icloudMcpSrc)) {
       mounts.push({
         hostPath: icloudMcpSrc,
@@ -86,7 +91,12 @@ function buildVolumeMounts(
     }
 
     // Image generation MCP server (main group only)
-    const imageGenMcpSrc = path.join(projectRoot, 'container', 'mcp-servers', 'image-gen');
+    const imageGenMcpSrc = path.join(
+      projectRoot,
+      'container',
+      'mcp-servers',
+      'image-gen',
+    );
     if (fs.existsSync(imageGenMcpSrc)) {
       mounts.push({
         hostPath: imageGenMcpSrc,
