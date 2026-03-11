@@ -4,26 +4,28 @@
  */
 import { ChildProcess, exec, spawn } from 'child_process';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 
 import {
   CONTAINER_IMAGE,
   CONTAINER_MAX_OUTPUT_SIZE,
   CONTAINER_TIMEOUT,
+  CREDENTIAL_PROXY_PORT,
   DATA_DIR,
   GROUPS_DIR,
   IDLE_TIMEOUT,
   TIMEZONE,
 } from './config.js';
-import { readEnvFile } from './env.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {
+  CONTAINER_HOST_GATEWAY,
   CONTAINER_RUNTIME_BIN,
+  hostGatewayArgs,
   readonlyMountArgs,
   stopContainer,
 } from './container-runtime.js';
+import { detectAuthMode } from './credential-proxy.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 
@@ -39,7 +41,6 @@ export interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
-  secrets?: Record<string, string>;
 }
 
 export interface ContainerOutput {
@@ -106,7 +107,7 @@ function buildVolumeMounts(
     }
 
     // Shadow .env so the agent cannot read secrets from the mounted project root.
-    // Secrets are passed via stdin instead (see readSecrets()).
+    // Credentials are injected by the credential proxy, never exposed to containers.
     const envFile = path.join(projectRoot, '.env');
     if (fs.existsSync(envFile)) {
       mounts.push({
@@ -246,57 +247,6 @@ function buildVolumeMounts(
   return mounts;
 }
 
-/**
- * Read the OAuth access token from ~/.claude/.credentials.json.
- * This file is kept fresh by the host Claude Code session, so containers
- * always receive a valid (non-expired) token without any manual rotation.
- * Returns undefined if the file is absent or unparseable.
- */
-function readHostOAuthToken(): string | undefined {
-  const credFile = path.join(
-    process.env.HOME || os.homedir(),
-    '.claude',
-    '.credentials.json',
-  );
-  try {
-    const raw = fs.readFileSync(credFile, 'utf-8');
-    const creds = JSON.parse(raw);
-    const token = creds?.claudeAiOauth?.accessToken;
-    return typeof token === 'string' && token ? token : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Read allowed secrets from .env for passing to the container via stdin.
- * Secrets are never written to disk or mounted as files.
- *
- * CLAUDE_CODE_OAUTH_TOKEN is sourced from ~/.claude/.credentials.json
- * (kept fresh by the host Claude Code session) with .env as fallback,
- * so containers always get a valid token without manual rotation.
- */
-function readSecrets(): Record<string, string> {
-  const secrets = readEnvFile([
-    'CLAUDE_CODE_OAUTH_TOKEN',
-    'ANTHROPIC_API_KEY',
-    'ANTHROPIC_BASE_URL',
-    'ANTHROPIC_AUTH_TOKEN',
-    'ICLOUD_APPLE_ID',
-    'ICLOUD_APP_PASSWORD',
-    'GEMINI_API_KEY',
-  ]);
-
-  // Prefer the live host token — it's refreshed automatically by Claude Code.
-  // Fall back to .env only if the credentials file is unavailable.
-  const hostToken = readHostOAuthToken();
-  if (hostToken) {
-    secrets['CLAUDE_CODE_OAUTH_TOKEN'] = hostToken;
-  }
-
-  return secrets;
-}
-
 function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
@@ -305,6 +255,26 @@ function buildContainerArgs(
 
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
+
+  // Route API traffic through the credential proxy (containers never see real secrets)
+  args.push(
+    '-e',
+    `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}`,
+  );
+
+  // Mirror the host's auth method with a placeholder value.
+  // API key mode: SDK sends x-api-key, proxy replaces with real key.
+  // OAuth mode:   SDK exchanges placeholder token for temp API key,
+  //               proxy injects real OAuth token on that exchange request.
+  const authMode = detectAuthMode();
+  if (authMode === 'api-key') {
+    args.push('-e', 'ANTHROPIC_API_KEY=placeholder');
+  } else {
+    args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
+  }
+
+  // Runtime-specific args for host gateway resolution
+  args.push(...hostGatewayArgs());
 
   // Run as host user so bind-mounted files are accessible.
   // Skip when running as root (uid 0), as the container's node user (uid 1000),
@@ -386,12 +356,8 @@ export async function runContainerAgent(
     let stdoutTruncated = false;
     let stderrTruncated = false;
 
-    // Pass secrets via stdin (never written to disk or mounted as files)
-    input.secrets = readSecrets();
     container.stdin.write(JSON.stringify(input));
     container.stdin.end();
-    // Remove secrets from input so they don't appear in logs
-    delete input.secrets;
 
     // Streaming output: parse OUTPUT_START/END marker pairs as they arrive
     let parseBuffer = '';
