@@ -3,6 +3,7 @@ import { Bot, InputFile } from 'grammy';
 
 import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
 import { logger } from '../logger.js';
+import { transcribeAudio } from '../transcription.js';
 import {
   Channel,
   OnChatMetadata,
@@ -93,8 +94,15 @@ export class TelegramChannel implements Channel {
       }
 
       // Store chat metadata for discovery
-      const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-      this.opts.onChatMetadata(chatJid, timestamp, chatName, 'telegram', isGroup);
+      const isGroup =
+        ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        chatName,
+        'telegram',
+        isGroup,
+      );
 
       // Only deliver full message for registered groups
       const group = this.opts.registeredGroups()[chatJid];
@@ -137,8 +145,15 @@ export class TelegramChannel implements Channel {
         'Unknown';
       const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
 
-      const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+      const isGroup =
+        ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        undefined,
+        'telegram',
+        isGroup,
+      );
       this.opts.onMessage(chatJid, {
         id: ctx.message.message_id.toString(),
         chat_jid: chatJid,
@@ -152,10 +167,62 @@ export class TelegramChannel implements Channel {
 
     this.bot.on('message:photo', (ctx) => storeNonText(ctx, '[Photo]'));
     this.bot.on('message:video', (ctx) => storeNonText(ctx, '[Video]'));
-    this.bot.on('message:voice', (ctx) =>
-      storeNonText(ctx, '[Voice message]'),
-    );
-    this.bot.on('message:audio', (ctx) => storeNonText(ctx, '[Audio]'));
+
+    // Voice messages: download and transcribe, fall back to placeholder
+    const handleVoice = async (ctx: any) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+
+      const timestamp = new Date(ctx.message.date * 1000).toISOString();
+      const senderName =
+        ctx.from?.first_name ||
+        ctx.from?.username ||
+        ctx.from?.id?.toString() ||
+        'Unknown';
+      const isGroup =
+        ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+
+      let content = '[Voice message]';
+      try {
+        const fileId =
+          ctx.message.voice?.file_id || ctx.message.audio?.file_id;
+        const mimeType = ctx.message.voice?.mime_type || ctx.message.audio?.mime_type || 'audio/ogg';
+        if (fileId) {
+          const file = await this.bot!.api.getFile(fileId);
+          const filePath = file.file_path;
+          if (filePath) {
+            const url = `https://api.telegram.org/file/bot${this.botToken}/${filePath}`;
+            const response = await fetch(url);
+            if (response.ok) {
+              const arrayBuffer = await response.arrayBuffer();
+              const audioBuffer = Buffer.from(arrayBuffer);
+              const transcript = await transcribeAudio(audioBuffer, mimeType);
+              if (transcript) {
+                content = `[Voice: ${transcript}]`;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Failed to download/transcribe voice message');
+      }
+
+      const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
+      this.opts.onMessage(chatJid, {
+        id: ctx.message.message_id.toString(),
+        chat_jid: chatJid,
+        sender: ctx.from?.id?.toString() || '',
+        sender_name: senderName,
+        content: `${content}${caption}`,
+        timestamp,
+        is_from_me: false,
+      });
+    };
+
+    this.bot.on('message:voice', handleVoice);
+    this.bot.on('message:audio', handleVoice);
     this.bot.on('message:document', (ctx) => {
       const name = ctx.message.document?.file_name || 'file';
       storeNonText(ctx, `[Document: ${name}]`);
@@ -202,7 +269,9 @@ export class TelegramChannel implements Channel {
       // Telegram has a 4096 character limit per message — split if needed
       const MAX_LENGTH = 4096;
       if (text.length <= MAX_LENGTH) {
-        await this.bot.api.sendMessage(numericId, text, { parse_mode: 'Markdown' });
+        await this.bot.api.sendMessage(numericId, text, {
+          parse_mode: 'Markdown',
+        });
       } else {
         for (let i = 0; i < text.length; i += MAX_LENGTH) {
           await this.bot.api.sendMessage(
@@ -226,7 +295,10 @@ export class TelegramChannel implements Channel {
     try {
       const numericId = jid.replace(/^tg:/, '');
       const imageBuffer = fs.readFileSync(imagePath);
-      await this.bot.api.sendPhoto(numericId, new InputFile(imageBuffer, 'image.png'));
+      await this.bot.api.sendPhoto(
+        numericId,
+        new InputFile(imageBuffer, 'image.png'),
+      );
       logger.info({ jid }, 'Telegram image sent');
     } catch (err) {
       logger.error({ jid, err }, 'Failed to send Telegram image');
