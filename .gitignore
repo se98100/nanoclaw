@@ -33,3 +33,7 @@ groups/global/*
 .nanoclaw/
 
 agents-sdk-docs
+
+# Local files
+nanoclaw.log
+profile.png

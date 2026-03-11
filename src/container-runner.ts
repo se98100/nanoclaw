@@ -4,6 +4,7 @@
  */
 import { ChildProcess, exec, spawn } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import {
@@ -74,6 +75,26 @@ function buildVolumeMounts(
       readonly: true,
     });
 
+    // iCloud calendar MCP server (main group only)
+    const icloudMcpSrc = path.join(projectRoot, 'container', 'mcp-servers', 'icloud-calendar');
+    if (fs.existsSync(icloudMcpSrc)) {
+      mounts.push({
+        hostPath: icloudMcpSrc,
+        containerPath: '/app/mcp-icloud-calendar',
+        readonly: true,
+      });
+    }
+
+    // Image generation MCP server (main group only)
+    const imageGenMcpSrc = path.join(projectRoot, 'container', 'mcp-servers', 'image-gen');
+    if (fs.existsSync(imageGenMcpSrc)) {
+      mounts.push({
+        hostPath: imageGenMcpSrc,
+        containerPath: '/app/mcp-image-gen',
+        readonly: true,
+      });
+    }
+
     // Shadow .env so the agent cannot read secrets from the mounted project root.
     // Secrets are passed via stdin instead (see readSecrets()).
     const envFile = path.join(projectRoot, '.env');
@@ -120,6 +141,9 @@ function buildVolumeMounts(
     '.claude',
   );
   fs.mkdirSync(groupSessionsDir, { recursive: true });
+  // Allow the container's node user (uid 1000) to write here when the host
+  // runs as root (uid 0), since the --user flag is skipped for root.
+  fs.chmodSync(groupSessionsDir, 0o777);
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
   if (!fs.existsSync(settingsFile)) {
     fs.writeFileSync(
@@ -164,9 +188,11 @@ function buildVolumeMounts(
   // Per-group IPC namespace: each group gets its own IPC directory
   // This prevents cross-group privilege escalation via IPC
   const groupIpcDir = resolveGroupIpcPath(group.folder);
-  fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true });
-  fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
-  fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });
+  for (const sub of ['messages', 'tasks', 'input', 'images']) {
+    const dir = path.join(groupIpcDir, sub);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.chmodSync(dir, 0o777);
+  }
   mounts.push({
     hostPath: groupIpcDir,
     containerPath: '/workspace/ipc',
@@ -211,16 +237,54 @@ function buildVolumeMounts(
 }
 
 /**
+ * Read the OAuth access token from ~/.claude/.credentials.json.
+ * This file is kept fresh by the host Claude Code session, so containers
+ * always receive a valid (non-expired) token without any manual rotation.
+ * Returns undefined if the file is absent or unparseable.
+ */
+function readHostOAuthToken(): string | undefined {
+  const credFile = path.join(
+    process.env.HOME || os.homedir(),
+    '.claude',
+    '.credentials.json',
+  );
+  try {
+    const raw = fs.readFileSync(credFile, 'utf-8');
+    const creds = JSON.parse(raw);
+    const token = creds?.claudeAiOauth?.accessToken;
+    return typeof token === 'string' && token ? token : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Read allowed secrets from .env for passing to the container via stdin.
  * Secrets are never written to disk or mounted as files.
+ *
+ * CLAUDE_CODE_OAUTH_TOKEN is sourced from ~/.claude/.credentials.json
+ * (kept fresh by the host Claude Code session) with .env as fallback,
+ * so containers always get a valid token without manual rotation.
  */
 function readSecrets(): Record<string, string> {
-  return readEnvFile([
+  const secrets = readEnvFile([
     'CLAUDE_CODE_OAUTH_TOKEN',
     'ANTHROPIC_API_KEY',
     'ANTHROPIC_BASE_URL',
     'ANTHROPIC_AUTH_TOKEN',
+    'ICLOUD_APPLE_ID',
+    'ICLOUD_APP_PASSWORD',
+    'GEMINI_API_KEY',
   ]);
+
+  // Prefer the live host token — it's refreshed automatically by Claude Code.
+  // Fall back to .env only if the credentials file is unavailable.
+  const hostToken = readHostOAuthToken();
+  if (hostToken) {
+    secrets['CLAUDE_CODE_OAUTH_TOKEN'] = hostToken;
+  }
+
+  return secrets;
 }
 
 function buildContainerArgs(
@@ -265,6 +329,9 @@ export async function runContainerAgent(
 
   const groupDir = resolveGroupFolderPath(group.folder);
   fs.mkdirSync(groupDir, { recursive: true });
+  // Allow the container's node user (uid 1000) to write here when the host
+  // runs as root (uid 0), since the --user flag is skipped for root.
+  fs.chmodSync(groupDir, 0o777);
 
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');

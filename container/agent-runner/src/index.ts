@@ -432,7 +432,9 @@ async function runQuery(
         'TeamCreate', 'TeamDelete', 'SendMessage',
         'TodoWrite', 'ToolSearch', 'Skill',
         'NotebookEdit',
-        'mcp__nanoclaw__*'
+        'mcp__nanoclaw__*',
+        'mcp__icloud_calendar__*',
+        'mcp__image_gen__*',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -448,6 +450,30 @@ async function runQuery(
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
+        ...(containerInput.isMain && sdkEnv.ICLOUD_APPLE_ID && sdkEnv.ICLOUD_APP_PASSWORD
+          ? {
+              icloud_calendar: {
+                command: 'node',
+                args: ['/app/mcp-icloud-calendar/index.js'],
+                env: {
+                  ICLOUD_APPLE_ID: sdkEnv.ICLOUD_APPLE_ID as string,
+                  ICLOUD_APP_PASSWORD: sdkEnv.ICLOUD_APP_PASSWORD as string,
+                },
+              },
+            }
+          : {}),
+        ...(containerInput.isMain && sdkEnv.GEMINI_API_KEY
+          ? {
+              image_gen: {
+                command: 'node',
+                args: ['/app/mcp-image-gen/index.js'],
+                env: {
+                  GEMINI_API_KEY: sdkEnv.GEMINI_API_KEY as string,
+                  NANOCLAW_CHAT_JID: containerInput.chatJid,
+                },
+              },
+            }
+          : {}),
       },
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
