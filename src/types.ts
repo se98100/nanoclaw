@@ -37,6 +37,11 @@ export interface CalendarConfig {
   allowedCalendars: '*' | string[];
 }
 
+export interface PicnicConfig {
+  // enabled: true allows this group to use the picnic-shopping skill
+  enabled: true;
+}
+
 export interface RegisteredGroup {
   name: string;
   folder: string;
@@ -44,6 +49,7 @@ export interface RegisteredGroup {
   added_at: string;
   containerConfig?: ContainerConfig;
   calendarConfig?: CalendarConfig;
+  picnicConfig?: PicnicConfig;
   requiresTrigger?: boolean; // Default: true for groups, false for solo chats
   isMain?: boolean; // True for the main control group (no trigger, elevated privileges)
 }

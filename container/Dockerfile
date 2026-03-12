@@ -38,6 +38,11 @@ ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 # Install agent-browser and claude-code globally
 RUN npm install -g agent-browser @anthropic-ai/claude-code
 
+# Install picnic-api for Picnic grocery shopping skill
+RUN mkdir -p /app/picnic-deps && cd /app/picnic-deps && \
+    npm init -y && \
+    npm install picnic-api
+
 # Create app directory
 WORKDIR /app
 

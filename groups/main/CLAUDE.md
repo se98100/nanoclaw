@@ -300,6 +300,18 @@ You have a `calendar-assistant` skill that watches the calendar and acts as a pr
 
 When the user asks to "monitor my calendar", "set up calendar watching", or "prepare for upcoming events", invoke the `calendar-assistant` skill. It handles the full setup and check protocol.
 
+### Picnic Online Shopping (Picnic Shopping skill)
+
+You have a `picnic-shopping` skill to fill your Picnic grocery cart from a shopping list. When you send a shopping list, the agent searches each item, picks the best match (preferring discounts), adds them to the cart, and sends a summary. You then confirm the order in the Picnic app.
+
+Also responds to: "aggiungi al carrello", "mostra carrello", "svuota carrello".
+
+**Product preferences & corrections:** save to `picnic-shopping/preferences.md` and apply on every run. When you correct a product choice, update preferences immediately so the same mistake is never repeated.
+
+**Enabling for other groups:** update `picnic_config` in `registered_groups` and add the skill section to the group's `CLAUDE.md`.
+
+---
+
 ### Flight monitoring (Flight Monitor skill)
 
 You have a `flight-monitor` skill that tracks flights via FlightRadar24 and sends alerts for delays, gate changes, and departure:

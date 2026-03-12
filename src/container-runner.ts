@@ -296,6 +296,18 @@ function buildContainerArgs(
       );
     }
   }
+  // Inject Picnic credentials for groups with picnicConfig enabled
+  if (group.picnicConfig?.enabled) {
+    args.push('-e', 'NANOCLAW_PICNIC_ENABLED=true');
+    const picnicSecrets = readEnvFile(['PICNIC_EMAIL', 'PICNIC_PASSWORD']);
+    if (picnicSecrets.PICNIC_EMAIL) {
+      args.push('-e', `PICNIC_EMAIL=${picnicSecrets.PICNIC_EMAIL}`);
+    }
+    if (picnicSecrets.PICNIC_PASSWORD) {
+      args.push('-e', `PICNIC_PASSWORD=${picnicSecrets.PICNIC_PASSWORD}`);
+    }
+  }
+
   // Inject Gemini API key for main group only (image generation)
   if (isMain) {
     const geminiSecret = readEnvFile(['GEMINI_API_KEY']);

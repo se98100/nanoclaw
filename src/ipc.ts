@@ -204,6 +204,7 @@ export async function processTaskIpc(
     requiresTrigger?: boolean;
     containerConfig?: RegisteredGroup['containerConfig'];
     calendarConfig?: RegisteredGroup['calendarConfig'];
+    picnicConfig?: RegisteredGroup['picnicConfig'];
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -473,6 +474,7 @@ export async function processTaskIpc(
           added_at: new Date().toISOString(),
           containerConfig: data.containerConfig,
           calendarConfig: data.calendarConfig,
+          picnicConfig: data.picnicConfig,
           requiresTrigger: data.requiresTrigger,
         });
       } else {
