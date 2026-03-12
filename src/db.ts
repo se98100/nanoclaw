@@ -596,9 +596,7 @@ export function getRegisteredGroup(
     calendarConfig: row.calendar_config
       ? JSON.parse(row.calendar_config)
       : undefined,
-    picnicConfig: row.picnic_config
-      ? JSON.parse(row.picnic_config)
-      : undefined,
+    picnicConfig: row.picnic_config ? JSON.parse(row.picnic_config) : undefined,
     requiresTrigger:
       row.requires_trigger === null ? undefined : row.requires_trigger === 1,
     isMain: row.is_main === 1 ? true : undefined,
