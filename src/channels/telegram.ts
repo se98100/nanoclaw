@@ -222,13 +222,24 @@ export class TelegramChannel implements Channel {
       const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
       const isGroup =
         ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        undefined,
+        'telegram',
+        isGroup,
+      );
 
       // Telegram provides multiple sizes; pick the largest
       const photos = ctx.message.photo;
       const largest = photos[photos.length - 1];
       const containerPath = largest
-        ? await this.downloadMedia(largest.file_id, group.folder, `photo_${msgId}.jpg`, largest.file_size)
+        ? await this.downloadMedia(
+            largest.file_id,
+            group.folder,
+            `photo_${msgId}.jpg`,
+            largest.file_size,
+          )
         : null;
 
       const content = containerPath
@@ -264,12 +275,23 @@ export class TelegramChannel implements Channel {
       const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
       const isGroup =
         ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        undefined,
+        'telegram',
+        isGroup,
+      );
 
       const video = ctx.message.video;
       const ext = video?.mime_type?.split('/')[1] || 'mp4';
       const containerPath = video
-        ? await this.downloadMedia(video.file_id, group.folder, `video_${msgId}.${ext}`, video.file_size)
+        ? await this.downloadMedia(
+            video.file_id,
+            group.folder,
+            `video_${msgId}.${ext}`,
+            video.file_size,
+          )
         : null;
 
       const content = containerPath
@@ -365,13 +387,24 @@ export class TelegramChannel implements Channel {
       const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
       const isGroup =
         ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        undefined,
+        'telegram',
+        isGroup,
+      );
 
       const doc = ctx.message.document;
       const origName = doc?.file_name || `file_${msgId}`;
       const savedName = `${msgId}_${origName}`;
       const containerPath = doc
-        ? await this.downloadMedia(doc.file_id, group.folder, savedName, doc.file_size)
+        ? await this.downloadMedia(
+            doc.file_id,
+            group.folder,
+            savedName,
+            doc.file_size,
+          )
         : null;
 
       const content = containerPath
