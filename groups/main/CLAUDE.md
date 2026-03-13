@@ -336,3 +336,45 @@ When scheduling tasks for other groups, use the `target_group_jid` parameter wit
 - `schedule_task(prompt: "...", schedule_type: "cron", schedule_value: "0 9 * * 1", target_group_jid: "120363336345536173@g.us")`
 
 The task will run in that group's context with access to their files and memory.
+
+---
+
+## Game Library Updates (Exophase HTML)
+
+Sergio tracks his game library on Exophase. Since Exophase is behind Cloudflare, he pastes HTML snippets directly into chat to trigger updates to `games.md` (`/workspace/group/games.md`).
+
+**Trigger:** Sergio pastes a raw HTML block containing `<li>` or `<ul>` elements with Exophase game data.
+
+### Parsing the HTML
+
+Exophase `<li>` structure:
+- Game title: `.game-info h3 a` (or `<h3>` text)
+- Platform: infer from context or ask if ambiguous
+- Playtime: `.hours` element
+- Achievements: `progress-units-top` div (format: `X/Y`)
+- Completion %: `.progress-bar` style attribute (`width: X%`)
+
+### Single game update (`<li>`)
+
+1. Parse title, hours, achievements, completion %
+2. Find the game in the correct platform section of `games.md`
+3. Update only that row's metrics (hours, trophies/achievements, %)
+4. If the game is not in `games.md` yet, add it to the correct platform section in order by playtime (descending)
+5. After updating, ask: "Hai finito questo gioco?" — if yes, add it to the "Giochi finiti" section and update "Recommended from library" if present
+
+### Full library refresh (`<ul>`)
+
+1. Parse all `<li>` entries in the block
+2. Identify the platform (from context or ask)
+3. For each game in the HTML:
+   - If it already exists in `games.md`: update its metrics (hours, achievements, %)
+   - If it's new: add it to the correct platform section in order by playtime (descending)
+4. **Never delete existing entries** — games already in `games.md` that are absent from the HTML are left untouched
+5. Update the "Last updated" date and total count at the top of the file
+6. Report a summary: N updated, N added, platform refreshed
+
+### General rules
+
+- Never delete games from `games.md`, even during a full refresh
+- Never ask for confirmation before writing — just do it and report what changed
+- If platform is ambiguous (e.g., a game exists on multiple platforms), ask before updating
