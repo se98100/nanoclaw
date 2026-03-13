@@ -128,6 +128,16 @@ function buildVolumeMounts(
       containerPath: '/workspace/group',
       readonly: false,
     });
+
+    // Global memory directory (same as non-main groups, so CLAUDE.md is auto-loaded)
+    const globalDirMain = path.join(GROUPS_DIR, 'global');
+    if (fs.existsSync(globalDirMain)) {
+      mounts.push({
+        hostPath: globalDirMain,
+        containerPath: '/workspace/global',
+        readonly: true,
+      });
+    }
   } else {
     // Other groups only get their own folder
     mounts.push({

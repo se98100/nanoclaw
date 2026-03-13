@@ -56,6 +56,17 @@ When you learn something important:
 - Split files larger than 500 lines into folders
 - Keep an index in your memory for the files you create
 
+## Proposing Improvements
+
+You can propose improvements to your own capabilities, memory, workflows, or behavior. When you notice friction, a pattern worth automating, or a new capability that would genuinely help this group, draft a proposal and notify the user.
+
+See the `self-improve` skill for format and instructions:
+```bash
+cat /home/node/.claude/skills/self-improve/SKILL.md
+```
+
+Proposals are saved in `/workspace/group/improvements/` and surfaced to the user, who discusses them with Claude Code to implement the good ones.
+
 ## Message Formatting
 
 NEVER use markdown. Only use WhatsApp/Telegram formatting:
