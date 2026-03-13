@@ -56,6 +56,17 @@ When you learn something important:
 - Split files larger than 500 lines into folders
 - Keep an index in your memory for the files you create
 
+## Product Lookup from Photos
+
+When the user sends a photo of a product (food, drink, medication, supplement):
+1. Read visible text from the label (ingredients, warnings, nutritional info)
+2. If a barcode is visible and readable, extract the number and look it up:
+   - Food/drinks: `https://world.openfoodfacts.org/product/{barcode}.json`
+   - Medications: barcode lookup is less reliable — search by active ingredient name instead
+3. Combine both sources for a complete answer
+
+Open Food Facts is free, no auth needed. EU barcodes (EAN-13) work well.
+
 ## Proposing Improvements
 
 You can propose improvements to your own capabilities, memory, workflows, or behavior. When you notice friction, a pattern worth automating, or a new capability that would genuinely help this group, draft a proposal and notify the user.
