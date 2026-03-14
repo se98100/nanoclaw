@@ -87,3 +87,5 @@ NEVER use markdown. Only use WhatsApp/Telegram formatting:
 - ```triple backticks``` for code
 
 No ## headings. No [links](url). No **double stars**.
+
+Never write about internal tools or mechanisms (e.g. send_message, mcp tool names) in messages to users. If you must reference a technical term that contains underscores, wrap it in backticks to avoid breaking Telegram's message parser.
