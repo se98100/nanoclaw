@@ -36,6 +36,7 @@ import {
   getRegisteredGroup,
   getRouterState,
   initDatabase,
+  SessionEntry,
   setRegisteredGroup,
   setRouterState,
   setSession,
@@ -54,6 +55,7 @@ import {
 } from './sender-allowlist.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { startTokenRefresher } from './token-refresher.js';
+import { archiveSession } from './session-archive.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
 
@@ -61,7 +63,7 @@ import { logger } from './logger.js';
 export { escapeXml, formatMessages } from './router.js';
 
 let lastTimestamp = '';
-let sessions: Record<string, string> = {};
+let sessions: Record<string, SessionEntry> = {};
 let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
@@ -80,6 +82,19 @@ function loadState(): void {
   }
   sessions = getAllSessions();
   registeredGroups = getAllRegisteredGroups();
+
+  // On startup, archive any stale sessions (null created_date or a past day).
+  // This handles the case where the process was restarted mid-day or after a crash.
+  const today = new Date().toISOString().split('T')[0];
+  for (const [folder, entry] of Object.entries(sessions)) {
+    if (entry.createdDate !== today) {
+      logger.info({ folder, sessionDate: entry.createdDate }, 'Startup: archiving stale session');
+      archiveSession(folder, entry.sessionId, ASSISTANT_NAME, entry.createdDate ?? undefined);
+      // Mark as archived by clearing the stale date so runAgent will start fresh
+      sessions[folder] = { sessionId: entry.sessionId, createdDate: null };
+    }
+  }
+
   logger.info(
     { groupCount: Object.keys(registeredGroups).length },
     'State loaded',
@@ -268,7 +283,20 @@ async function runAgent(
   onOutput?: (output: ContainerOutput) => Promise<void>,
 ): Promise<'success' | 'error'> {
   const isMain = group.isMain === true;
-  const sessionId = sessions[group.folder];
+
+  // Only resume the session if it was created today — otherwise start fresh.
+  // This keeps daily sessions short and prevents context explosion from old transcripts.
+  const today = new Date().toISOString().split('T')[0];
+  const sessionEntry = sessions[group.folder];
+  const isStaleSession = sessionEntry && sessionEntry.createdDate !== today;
+  if (isStaleSession) {
+    logger.info(
+      { group: group.name, sessionDate: sessionEntry.createdDate },
+      'Day changed — archiving previous session before starting a new one',
+    );
+    archiveSession(group.folder, sessionEntry.sessionId, ASSISTANT_NAME, sessionEntry.createdDate);
+  }
+  const sessionId = isStaleSession ? undefined : sessionEntry?.sessionId;
 
   // Update tasks snapshot for container to read (filtered by group)
   const tasks = getAllTasks();
@@ -299,8 +327,8 @@ async function runAgent(
   const wrappedOnOutput = onOutput
     ? async (output: ContainerOutput) => {
         if (output.newSessionId) {
-          sessions[group.folder] = output.newSessionId;
-          setSession(group.folder, output.newSessionId);
+          sessions[group.folder] = { sessionId: output.newSessionId, createdDate: today };
+          setSession(group.folder, output.newSessionId, today);
         }
         await onOutput(output);
       }
@@ -311,7 +339,7 @@ async function runAgent(
       group,
       {
         prompt,
-        sessionId,
+        sessionId: sessionId,
         groupFolder: group.folder,
         chatJid,
         isMain,
@@ -323,8 +351,8 @@ async function runAgent(
     );
 
     if (output.newSessionId) {
-      sessions[group.folder] = output.newSessionId;
-      setSession(group.folder, output.newSessionId);
+      sessions[group.folder] = { sessionId: output.newSessionId, createdDate: today };
+      setSession(group.folder, output.newSessionId, today);
     }
 
     if (output.status === 'error') {
@@ -591,6 +619,8 @@ async function main(): Promise<void> {
     getAvailableGroups,
     writeGroupsSnapshot: (gf, im, ag, rj) =>
       writeGroupsSnapshot(gf, im, ag, rj),
+    writeTasksSnapshot: (gf, im, tasks) =>
+      writeTasksSnapshot(gf, im, tasks),
   });
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();

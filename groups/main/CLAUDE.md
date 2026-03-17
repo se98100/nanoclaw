@@ -43,15 +43,6 @@ Rule of thumb:
 
 When working as a sub-agent or teammate, only use `send_message` if instructed to by the main agent.
 
-## Memory
-
-The `conversations/` folder contains searchable history of past conversations. Use this to recall context from previous sessions.
-
-When you learn something important:
-- Create files for structured data (e.g., `customers.md`, `preferences.md`)
-- Split files larger than 500 lines into folders
-- Keep an index in your memory for the files you create
-
 ## WhatsApp Formatting (and other messaging apps)
 
 Do NOT use markdown headings (##) in WhatsApp messages. Only use:
@@ -79,248 +70,21 @@ Main has read-only access to the project and read-write access to its group fold
 
 Key paths inside the container:
 - `/workspace/project/store/messages.db` - SQLite database
-- `/workspace/project/store/messages.db` (registered_groups table) - Group config
 - `/workspace/project/groups/` - All group folders
 
----
+## Reference Docs (read when needed)
 
-## Managing Groups
-
-### Finding Available Groups
-
-Available groups are provided in `/workspace/ipc/available_groups.json`:
-
-```json
-{
-  "groups": [
-    {
-      "jid": "120363336345536173@g.us",
-      "name": "Family Chat",
-      "lastActivity": "2026-01-31T12:00:00.000Z",
-      "isRegistered": false
-    }
-  ],
-  "lastSync": "2026-01-31T12:00:00.000Z"
-}
-```
-
-Groups are ordered by most recent activity. The list is synced from WhatsApp daily.
-
-If a group the user mentions isn't in the list, request a fresh sync:
-
-```bash
-echo '{"type": "refresh_groups"}' > /workspace/ipc/tasks/refresh_$(date +%s).json
-```
-
-Then wait a moment and re-read `available_groups.json`.
-
-**Fallback**: Query the SQLite database directly:
-
-```bash
-sqlite3 /workspace/project/store/messages.db "
-  SELECT jid, name, last_message_time
-  FROM chats
-  WHERE jid LIKE '%@g.us' AND jid != '__group_sync__'
-  ORDER BY last_message_time DESC
-  LIMIT 10;
-"
-```
-
-### Registered Groups Config
-
-Groups are registered in the SQLite `registered_groups` table:
-
-```json
-{
-  "1234567890-1234567890@g.us": {
-    "name": "Family Chat",
-    "folder": "whatsapp_family-chat",
-    "trigger": "@Andy",
-    "added_at": "2024-01-31T12:00:00.000Z"
-  }
-}
-```
-
-Fields:
-- **Key**: The chat JID (unique identifier — WhatsApp, Telegram, Slack, Discord, etc.)
-- **name**: Display name for the group
-- **folder**: Channel-prefixed folder name under `groups/` for this group's files and memory
-- **trigger**: The trigger word (usually same as global, but could differ)
-- **requiresTrigger**: Whether `@trigger` prefix is needed (default: `true`). Set to `false` for solo/personal chats where all messages should be processed
-- **isMain**: Whether this is the main control group (elevated privileges, no trigger required)
-- **added_at**: ISO timestamp when registered
-
-### Trigger Behavior
-
-- **Main group** (`isMain: true`): No trigger needed — all messages are processed automatically
-- **Groups with `requiresTrigger: false`**: No trigger needed — all messages processed (use for 1-on-1 or solo chats)
-- **Other groups** (default): Messages must start with `@AssistantName` to be processed
-
-### Adding a Group
-
-1. Query the database to find the group's JID
-2. Use the `register_group` MCP tool with the JID, name, folder, and trigger
-3. Optionally include `containerConfig` for additional mounts
-4. The group folder is created automatically: `/workspace/project/groups/{folder-name}/`
-5. Optionally create an initial `CLAUDE.md` for the group
-
-Folder naming convention — channel prefix with underscore separator:
-- WhatsApp "Family Chat" → `whatsapp_family-chat`
-- Telegram "Dev Team" → `telegram_dev-team`
-- Discord "General" → `discord_general`
-- Slack "Engineering" → `slack_engineering`
-- Use lowercase, hyphens for the group name part
-
-#### Adding Additional Directories for a Group
-
-Groups can have extra directories mounted. Add `containerConfig` to their entry:
-
-```json
-{
-  "1234567890@g.us": {
-    "name": "Dev Team",
-    "folder": "dev-team",
-    "trigger": "@Andy",
-    "added_at": "2026-01-31T12:00:00Z",
-    "containerConfig": {
-      "additionalMounts": [
-        {
-          "hostPath": "~/projects/webapp",
-          "containerPath": "webapp",
-          "readonly": false
-        }
-      ]
-    }
-  }
-}
-```
-
-The directory will appear at `/workspace/extra/webapp` in that group's container.
-
-#### Sender Allowlist
-
-After registering a group, explain the sender allowlist feature to the user:
-
-> This group can be configured with a sender allowlist to control who can interact with me. There are two modes:
->
-> - **Trigger mode** (default): Everyone's messages are stored for context, but only allowed senders can trigger me with @{AssistantName}.
-> - **Drop mode**: Messages from non-allowed senders are not stored at all.
->
-> For closed groups with trusted members, I recommend setting up an allow-only list so only specific people can trigger me. Want me to configure that?
-
-If the user wants to set up an allowlist, edit `~/.config/nanoclaw/sender-allowlist.json` on the host:
-
-```json
-{
-  "default": { "allow": "*", "mode": "trigger" },
-  "chats": {
-    "<chat-jid>": {
-      "allow": ["sender-id-1", "sender-id-2"],
-      "mode": "trigger"
-    }
-  },
-  "logDenied": true
-}
-```
-
-Notes:
-- Your own messages (`is_from_me`) explicitly bypass the allowlist in trigger checks. Bot messages are filtered out by the database query before trigger evaluation, so they never reach the allowlist.
-- If the config file doesn't exist or is invalid, all senders are allowed (fail-open)
-- The config file is on the host at `~/.config/nanoclaw/sender-allowlist.json`, not inside the container
-
-### Removing a Group
-
-1. Read `/workspace/project/data/registered_groups.json`
-2. Remove the entry for that group
-3. Write the updated JSON back
-4. The group folder and its files remain (don't delete them)
-
-### Listing Groups
-
-Read `/workspace/project/data/registered_groups.json` and format it nicely.
+- Managing groups, allowlists, container mounts → `docs/admin-groups.md`
+- iCloud Calendar config, timezone handling, per-group access → `docs/admin-calendar.md`
 
 ---
 
-## iCloud Calendar
+## Skills
 
-You have access to the user's iCloud calendar via MCP tools:
-
-| Tool | What it does |
-|------|-------------|
-| `mcp__icloud_calendar__list_calendars` | List all calendars (call first to get URLs) |
-| `mcp__icloud_calendar__list_events` | List events in a date range |
-| `mcp__icloud_calendar__create_event` | Create a new event |
-| `mcp__icloud_calendar__update_event` | Update title, time, location, or description |
-| `mcp__icloud_calendar__delete_event` | Delete an event |
-
-### Typical workflow
-
-1. Call `list_calendars` once to get calendar URLs
-2. Use those URLs with `list_events` or `create_event`
-
-### Preparation tasks
-
-When the user asks you to set up reminders or preparation for events:
-1. Use `list_events` to find the event details (start time, title)
-2. Use `mcp__nanoclaw__schedule_task` to schedule a reminder before the event
-
-Example: for a meeting at 14:00, schedule a task for 13:30 with `schedule_type: "once"` and a prompt that describes what to remind.
-
-**CRITICAL - Timezone Handling:**
-- The `schedule_value` for `schedule_type: "once"` must be in the **container's timezone (UTC)**
-- Always convert from user's local time to UTC before scheduling
-- Document both local and UTC times in the task prompt for clarity
-- Example: User in Maldives (UTC+5) wants reminder at 12:00 local → schedule at "2026-03-09T07:00:00"
-- See `/workspace/group/calendar-watch/timezone-fix-notes.md` for detailed conversion guidelines
-
-### Calendar access for other groups
-
-Calendar access is controlled per-group via `calendarConfig` in the group's registration. It is injected as the `NANOCLAW_ALLOWED_CALENDARS` env var at container startup — groups cannot change it themselves.
-
-To grant a group access to specific calendars, update their registration in the database:
-
-```json
-{
-  "calendarConfig": {
-    "allowedCalendars": ["Famiglia"]
-  }
-}
-```
-
-Use `"allowedCalendars": "*"` for full access (main group default). Omit `calendarConfig` entirely to deny all calendar access (default for new groups).
-
-To set this at registration time, pass `calendarConfig` when calling `mcp__nanoclaw__register_group`. To change it later, the admin must update the `registered_groups` table in SQLite directly from the host (outside the container).
-
-### Proactive calendar monitoring (Calendar Assistant skill)
-
-You have a `calendar-assistant` skill that watches the calendar and acts as a proactive PA:
-- Detects new and changed events automatically
-- Creates preparation checklists (visa, vaccines, packing, transport, etc.)
-- Schedules intelligent reminders per event type
-
-When the user asks to "monitor my calendar", "set up calendar watching", or "prepare for upcoming events", invoke the `calendar-assistant` skill. It handles the full setup and check protocol.
-
-### Picnic Online Shopping (Picnic Shopping skill)
-
-You have a `picnic-shopping` skill to fill your Picnic grocery cart from a shopping list. When you send a shopping list, the agent searches each item, picks the best match (preferring discounts), adds them to the cart, and sends a summary. You then confirm the order in the Picnic app.
-
-Also responds to: "aggiungi al carrello", "mostra carrello", "svuota carrello".
-
-**Product preferences & corrections:** save to `picnic-shopping/preferences.md` and apply on every run. When you correct a product choice, update preferences immediately so the same mistake is never repeated.
-
-**Enabling for other groups:** update `picnic_config` in `registered_groups` and add the skill section to the group's `CLAUDE.md`.
-
----
-
-### Flight monitoring (Flight Monitor skill)
-
-You have a `flight-monitor` skill that tracks flights via FlightRadar24 and sends alerts for delays, gate changes, and departure:
-- Monitors a specific flight number + date
-- Checks at increasing frequency as departure approaches (every 6h → 2h → 30min → 15min)
-- Sends alerts for delays (≥15 min), gate changes, and departure confirmation
-- Stops automatically when the flight departs (you'll be on the plane)
-
-When the user asks to "track flight LH123", "monitor my flight", "alert me if my flight is delayed", or similar, invoke the `flight-monitor` skill.
+- **Calendar Assistant** — Monitors calendar proactively, creates prep checklists and reminders per event type. Invoke for "monitor my calendar" or "prepare for upcoming events". Details: `docs/skill-calendar-watch.md`
+- **Picnic Shopping** — Fills Picnic grocery cart from a list, applies saved preferences. Invoke for shopping lists or "aggiungi al carrello". Details: `docs/skill-picnic.md`
+- **Flight Monitor** — Tracks a flight via FlightRadar24, alerts for delays/gate changes. Invoke for "track flight LH123" or "monitor my flight". Details: `docs/skill-flight.md`
+- **Exophase Games** — Updates `games.md` from pasted HTML snippets. Triggers automatically when Sergio pastes Exophase HTML. Details: `docs/skill-games.md`
 
 ---
 
@@ -330,51 +94,13 @@ You can read and write to `/workspace/project/groups/global/CLAUDE.md` for facts
 
 ---
 
-## Scheduling for Other Groups
+## Proposing Improvements
 
-When scheduling tasks for other groups, use the `target_group_jid` parameter with the group's JID from `registered_groups.json`:
-- `schedule_task(prompt: "...", schedule_type: "cron", schedule_value: "0 9 * * 1", target_group_jid: "120363336345536173@g.us")`
+You can propose improvements to your own capabilities, memory, workflows, or behavior. When you notice friction, a pattern worth automating, or a new capability that would genuinely help this group, draft a proposal and notify the user.
 
-The task will run in that group's context with access to their files and memory.
+See the `self-improve` skill for format and instructions:
+```bash
+cat /home/node/.claude/skills/self-improve/SKILL.md
+```
 
----
-
-## Game Library Updates (Exophase HTML)
-
-Sergio tracks his game library on Exophase. Since Exophase is behind Cloudflare, he pastes HTML snippets directly into chat to trigger updates to `games.md` (`/workspace/group/games.md`).
-
-**Trigger:** Sergio pastes a raw HTML block containing `<li>` or `<ul>` elements with Exophase game data.
-
-### Parsing the HTML
-
-Exophase `<li>` structure:
-- Game title: `.game-info h3 a` (or `<h3>` text)
-- Platform: infer from context or ask if ambiguous
-- Playtime: `.hours` element
-- Achievements: `progress-units-top` div (format: `X/Y`)
-- Completion %: `.progress-bar` style attribute (`width: X%`)
-
-### Single game update (`<li>`)
-
-1. Parse title, hours, achievements, completion %
-2. Find the game in the correct platform section of `games.md`
-3. Update only that row's metrics (hours, trophies/achievements, %)
-4. If the game is not in `games.md` yet, add it to the correct platform section in order by playtime (descending)
-5. After updating, ask: "Hai finito questo gioco?" — if yes, add it to the "Giochi finiti" section and update "Recommended from library" if present
-
-### Full library refresh (`<ul>`)
-
-1. Parse all `<li>` entries in the block
-2. Identify the platform (from context or ask)
-3. For each game in the HTML:
-   - If it already exists in `games.md`: update its metrics (hours, achievements, %)
-   - If it's new: add it to the correct platform section in order by playtime (descending)
-4. **Never delete existing entries** — games already in `games.md` that are absent from the HTML are left untouched
-5. Update the "Last updated" date and total count at the top of the file
-6. Report a summary: N updated, N added, platform refreshed
-
-### General rules
-
-- Never delete games from `games.md`, even during a full refresh
-- Never ask for confirmation before writing — just do it and report what changed
-- If platform is ambiguous (e.g., a game exists on multiple platforms), ask before updating
+Proposals are saved in `/workspace/group/improvements/` and surfaced to the user, who discusses them with Claude Code to implement the good ones.

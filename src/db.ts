@@ -71,7 +71,8 @@ function createSchema(database: Database.Database): void {
     );
     CREATE TABLE IF NOT EXISTS sessions (
       group_folder TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL
+      session_id TEXT NOT NULL,
+      created_date TEXT
     );
     CREATE TABLE IF NOT EXISTS registered_groups (
       jid TEXT PRIMARY KEY,
@@ -133,6 +134,13 @@ function createSchema(database: Database.Database): void {
     database.exec(
       `ALTER TABLE registered_groups ADD COLUMN picnic_config TEXT`,
     );
+  } catch {
+    /* column already exists */
+  }
+
+  // Add created_date column to sessions if it doesn't exist (migration for existing DBs)
+  try {
+    database.exec(`ALTER TABLE sessions ADD COLUMN created_date TEXT`);
   } catch {
     /* column already exists */
   }
@@ -531,26 +539,32 @@ export function setRouterState(key: string, value: string): void {
 
 // --- Session accessors ---
 
-export function getSession(groupFolder: string): string | undefined {
+export interface SessionEntry {
+  sessionId: string;
+  createdDate: string | null;
+}
+
+export function getSession(groupFolder: string): SessionEntry | undefined {
   const row = db
-    .prepare('SELECT session_id FROM sessions WHERE group_folder = ?')
-    .get(groupFolder) as { session_id: string } | undefined;
-  return row?.session_id;
+    .prepare('SELECT session_id, created_date FROM sessions WHERE group_folder = ?')
+    .get(groupFolder) as { session_id: string; created_date: string | null } | undefined;
+  if (!row) return undefined;
+  return { sessionId: row.session_id, createdDate: row.created_date ?? null };
 }
 
-export function setSession(groupFolder: string, sessionId: string): void {
+export function setSession(groupFolder: string, sessionId: string, createdDate?: string): void {
   db.prepare(
-    'INSERT OR REPLACE INTO sessions (group_folder, session_id) VALUES (?, ?)',
-  ).run(groupFolder, sessionId);
+    'INSERT OR REPLACE INTO sessions (group_folder, session_id, created_date) VALUES (?, ?, ?)',
+  ).run(groupFolder, sessionId, createdDate ?? new Date().toISOString().split('T')[0]);
 }
 
-export function getAllSessions(): Record<string, string> {
+export function getAllSessions(): Record<string, SessionEntry> {
   const rows = db
-    .prepare('SELECT group_folder, session_id FROM sessions')
-    .all() as Array<{ group_folder: string; session_id: string }>;
-  const result: Record<string, string> = {};
+    .prepare('SELECT group_folder, session_id, created_date FROM sessions')
+    .all() as Array<{ group_folder: string; session_id: string; created_date: string | null }>;
+  const result: Record<string, SessionEntry> = {};
   for (const row of rows) {
-    result[row.group_folder] = row.session_id;
+    result[row.group_folder] = { sessionId: row.session_id, createdDate: row.created_date ?? null };
   }
   return result;
 }

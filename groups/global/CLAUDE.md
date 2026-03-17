@@ -49,12 +49,44 @@ Files you create are saved in `/workspace/group/`. Use this for notes, research,
 
 ## Memory
 
-The `conversations/` folder contains searchable history of past conversations. Use this to recall context from previous sessions.
+Your workspace has a structured memory system. Follow these rules to keep it organized as it grows.
 
-When you learn something important:
-- Create files for structured data (e.g., `customers.md`, `preferences.md`)
-- Split files larger than 500 lines into folders
-- Keep an index in your memory for the files you create
+### Long-Term Memory (MEMORY.md)
+
+`MEMORY.md` is your persistent memory — the first thing you read, the place you keep important facts.
+
+At the start of each conversation:
+- Read `MEMORY.md` to recall long-term context
+
+When you learn something important during a conversation:
+- Update `MEMORY.md` immediately (don't wait for the nightly consolidation)
+- Keep it organized by topic, concise, and deduplicated
+
+### Recent Context (conversations/)
+
+The `conversations/` folder contains recent conversation archives (last 5 days). Use these to recall context from recent sessions. Older conversations are consolidated into MEMORY.md nightly.
+
+### Workspace Organization Rules
+
+MEMORY.md is the index of everything in your workspace. When you create or change files:
+
+1. **New file or folder** → add an entry to MEMORY.md under the appropriate section with a one-line description
+2. **Delete a file** → remove it from MEMORY.md
+3. **File grows beyond 500 lines** → split into a folder with sub-files, update MEMORY.md to point to the folder
+4. **New topic or category emerges** → create a dedicated file (e.g., `travel.md`, `health.md`), reference it from MEMORY.md
+5. **MEMORY.md itself exceeds 200 lines** → extract detailed sections into dedicated files, keep only summaries and pointers in MEMORY.md
+
+The goal: someone reading only MEMORY.md should understand what's in the workspace and where to find anything.
+
+### What belongs in MEMORY.md vs. dedicated files
+
+| In MEMORY.md | In dedicated files |
+|---|---|
+| User profile, preferences | Detailed records (transactions, logs) |
+| Key facts and decisions | Structured data (lists, tables) |
+| File index with descriptions | Step-by-step procedures |
+| Active tasks and reminders | Historical archives |
+| Short preference notes | Extensive preference catalogs |
 
 ## Product Lookup from Photos
 

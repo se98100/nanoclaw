@@ -57,6 +57,51 @@ interface VolumeMount {
   readonly: boolean;
 }
 
+/**
+ * Remove accumulated SDK artifacts that have no long-term value:
+ * - telemetry/ and debug/ directories (failed API events, startup logs)
+ * - JSONL session transcripts older than 7 days (never touch memory/ or active session)
+ */
+function cleanupSessionData(sessionDir: string): void {
+  // Wipe telemetry and debug log directories
+  for (const dir of ['telemetry', 'debug']) {
+    const dirPath = path.join(sessionDir, dir);
+    if (fs.existsSync(dirPath)) {
+      try {
+        fs.rmSync(dirPath, { recursive: true, force: true });
+        fs.mkdirSync(dirPath, { recursive: true });
+        fs.chmodSync(dirPath, 0o777);
+      } catch {
+        /* non-fatal */
+      }
+    }
+  }
+
+  // Prune stale JSONL session transcripts (>7 days old)
+  const projectsDir = path.join(sessionDir, 'projects', '-workspace-group');
+  if (!fs.existsSync(projectsDir)) return;
+
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - SEVEN_DAYS_MS;
+
+  try {
+    for (const entry of fs.readdirSync(projectsDir)) {
+      if (!entry.endsWith('.jsonl')) continue;
+      const filePath = path.join(projectsDir, entry);
+      try {
+        const stat = fs.statSync(filePath);
+        if (stat.mtimeMs < cutoff) {
+          fs.unlinkSync(filePath);
+        }
+      } catch {
+        /* non-fatal */
+      }
+    }
+  } catch {
+    /* non-fatal */
+  }
+}
+
 function buildVolumeMounts(
   group: RegisteredGroup,
   isMain: boolean,
@@ -170,29 +215,31 @@ function buildVolumeMounts(
   // Allow the container's node user (uid 1000) to write here when the host
   // runs as root (uid 0), since the --user flag is skipped for root.
   fs.chmodSync(groupSessionsDir, 0o777);
+
+  // Clean up accumulated SDK artifacts that have no long-term value.
+  cleanupSessionData(groupSessionsDir);
+
+  // Always write settings.json to ensure config stays up to date across upgrades.
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
-  if (!fs.existsSync(settingsFile)) {
-    fs.writeFileSync(
-      settingsFile,
-      JSON.stringify(
-        {
-          env: {
-            // Enable agent swarms (subagent orchestration)
-            // https://code.claude.com/docs/en/agent-teams#orchestrate-teams-of-claude-code-sessions
-            CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-            // Load CLAUDE.md from additional mounted directories
-            // https://code.claude.com/docs/en/memory#load-memory-from-additional-directories
-            CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
-            // Enable Claude's memory feature (persists user preferences between sessions)
-            // https://code.claude.com/docs/en/memory#manage-auto-memory
-            CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
-          },
+  fs.writeFileSync(
+    settingsFile,
+    JSON.stringify(
+      {
+        env: {
+          // Enable agent swarms (subagent orchestration)
+          // https://code.claude.com/docs/en/agent-teams#orchestrate-teams-of-claude-code-sessions
+          CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
+          // Load CLAUDE.md from additional mounted directories
+          // https://code.claude.com/docs/en/memory#load-memory-from-additional-directories
+          CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
+          // Disable SDK auto-memory: we manage long-term memory via MEMORY.md in each group's workspace.
+          CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
         },
-        null,
-        2,
-      ) + '\n',
-    );
-  }
+      },
+      null,
+      2,
+    ) + '\n',
+  );
 
   // Sync skills from container/skills/ into each group's .claude/skills/
   const skillsSrc = path.join(process.cwd(), 'container', 'skills');
