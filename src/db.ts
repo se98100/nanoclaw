@@ -546,25 +546,44 @@ export interface SessionEntry {
 
 export function getSession(groupFolder: string): SessionEntry | undefined {
   const row = db
-    .prepare('SELECT session_id, created_date FROM sessions WHERE group_folder = ?')
-    .get(groupFolder) as { session_id: string; created_date: string | null } | undefined;
+    .prepare(
+      'SELECT session_id, created_date FROM sessions WHERE group_folder = ?',
+    )
+    .get(groupFolder) as
+    | { session_id: string; created_date: string | null }
+    | undefined;
   if (!row) return undefined;
   return { sessionId: row.session_id, createdDate: row.created_date ?? null };
 }
 
-export function setSession(groupFolder: string, sessionId: string, createdDate?: string): void {
+export function setSession(
+  groupFolder: string,
+  sessionId: string,
+  createdDate?: string,
+): void {
   db.prepare(
     'INSERT OR REPLACE INTO sessions (group_folder, session_id, created_date) VALUES (?, ?, ?)',
-  ).run(groupFolder, sessionId, createdDate ?? new Date().toISOString().split('T')[0]);
+  ).run(
+    groupFolder,
+    sessionId,
+    createdDate ?? new Date().toISOString().split('T')[0],
+  );
 }
 
 export function getAllSessions(): Record<string, SessionEntry> {
   const rows = db
     .prepare('SELECT group_folder, session_id, created_date FROM sessions')
-    .all() as Array<{ group_folder: string; session_id: string; created_date: string | null }>;
+    .all() as Array<{
+    group_folder: string;
+    session_id: string;
+    created_date: string | null;
+  }>;
   const result: Record<string, SessionEntry> = {};
   for (const row of rows) {
-    result[row.group_folder] = { sessionId: row.session_id, createdDate: row.created_date ?? null };
+    result[row.group_folder] = {
+      sessionId: row.session_id,
+      createdDate: row.created_date ?? null,
+    };
   }
   return result;
 }

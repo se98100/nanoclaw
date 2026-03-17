@@ -88,7 +88,10 @@ export function archiveSession(
   );
 
   if (!fs.existsSync(jsonlPath)) {
-    logger.debug({ groupFolder, sessionId }, 'No JSONL found for session, skipping archive');
+    logger.debug(
+      { groupFolder, sessionId },
+      'No JSONL found for session, skipping archive',
+    );
     return false;
   }
 
@@ -96,13 +99,19 @@ export function archiveSession(
   try {
     content = fs.readFileSync(jsonlPath, 'utf-8');
   } catch (err) {
-    logger.warn({ groupFolder, sessionId, err }, 'Failed to read session JSONL');
+    logger.warn(
+      { groupFolder, sessionId, err },
+      'Failed to read session JSONL',
+    );
     return false;
   }
 
   const messages = parseTranscript(content);
   if (messages.length === 0) {
-    logger.debug({ groupFolder, sessionId }, 'Session transcript is empty, skipping archive');
+    logger.debug(
+      { groupFolder, sessionId },
+      'Session transcript is empty, skipping archive',
+    );
     return false;
   }
 
@@ -120,7 +129,10 @@ export function archiveSession(
     logger.info({ groupFolder, sessionId, filePath }, 'Session archived');
     return true;
   } catch (err) {
-    logger.warn({ groupFolder, sessionId, err }, 'Failed to write conversation archive');
+    logger.warn(
+      { groupFolder, sessionId, err },
+      'Failed to write conversation archive',
+    );
     return false;
   }
 }

@@ -56,6 +56,22 @@ All state lives in `/workspace/group/picnic-shopping/`:
 
 Supported countries: `"de"` (Germany), `"nl"` (Netherlands).
 
+**purchase-history.json format** — updated automatically after each successful cart fill:
+```json
+{
+  "items": [
+    {
+      "query": "latte intero",
+      "searchTerm": "vollmilch",
+      "name": "Weihenstephan Frische Vollmilch 3,5%",
+      "id": "12345",
+      "count": 5,
+      "lastBought": "2026-03-10"
+    }
+  ]
+}
+```
+
 Ensure the directory exists:
 ```bash
 mkdir -p /workspace/group/picnic-shopping
@@ -175,16 +191,44 @@ node "$API" add "<PRODUCT_ID>" <QTY> "$AUTH"
 
 After each result, record: `✅ <productName> (€<price>, -<discount>%)` or `❌ <item> — not found`.
 
-### Step 5: Get cart total and report
+### Step 5: Get cart total
 
 ```bash
 node "$API" cart "$AUTH"
 ```
 
-Send a text summary:
+### Step 6: Check purchase history for missing usual items
+
+Load `/workspace/group/picnic-shopping/purchase-history.json` (if it exists).
+
+Build the set of **current run queries** (the normalized item names the user just asked for).
+
+Find history items where:
+- `count >= 2` (bought at least twice before)
+- The item's `query` does **not** loosely match any current-run query
+
+These are **missing usual items** — the user typically buys them but didn't include them this time.
+
+If there are missing usual items, build a numbered list and include it in the final summary message:
+
+```
+mcp__nanoclaw__send_message(text: "🛒 *Carrello Picnic aggiornato!*\n\n✅ *Aggiunti:*\n• <product> €<price> (-<discount>%)\n...\n\n❌ *Non trovati:* <items>\n\n💰 *Totale stimato: €<total>*\n\n💡 *Di solito compri anche:*\n1. Latte intero (acquistato 5 volte)\n2. Pane (acquistato 3 volte)\n...\n\nVuoi aggiungere qualcuno di questi? Rispondi con i numeri (es. \"1 3\") oppure \"no\" per saltare.\n\n📱 Altrimenti, apri l'app Picnic per scegliere la finestra di consegna e confermare l'ordine.")
+```
+
+If there are **no** missing usual items (or no history yet), send the standard summary without the suggestions section:
+
 ```
 mcp__nanoclaw__send_message(text: "🛒 *Carrello Picnic aggiornato!*\n\n✅ *Aggiunti:*\n• <product> €<price> (-<discount>%)\n...\n\n❌ *Non trovati:* <items>\n\n💰 *Totale stimato: €<total>*\n\n📱 Apri l'app Picnic per scegliere la finestra di consegna e confermare l'ordine.")
 ```
+
+### Step 7: Update purchase history
+
+After sending the summary (regardless of whether suggestions were sent), update `purchase-history.json`:
+
+- For each item successfully added to the cart this run:
+  - If the item's query already exists in history: increment `count` and update `lastBought`
+  - If it's new: append an entry with `count: 1` and today's date as `lastBought`
+- Write the updated JSON back to `/workspace/group/picnic-shopping/purchase-history.json`
 
 Save a summary to `/workspace/group/picnic-shopping/last-cart.json`.
 
@@ -205,7 +249,52 @@ Format and send the cart contents as a message.
 
 ---
 
-## Mode 4 — Clear Cart
+## Mode 4 — Add Suggested Items (follow-up after suggestions)
+
+Triggered when the user replies to a suggestions message with numbers or "no".
+
+**Examples:** "1 2", "aggiungi 1 e 3", "sì tutti", "no grazie", "no"
+
+### Step 1: Parse the user's reply
+
+- If the reply is a rejection ("no", "no grazie", "skip", etc.): reply *"Ok, nessun problema! Apri l'app Picnic per confermare l'ordine."* and stop.
+- If the reply is "tutti" / "all" / "sì tutti": treat it as selecting all suggested numbers.
+- Otherwise: extract the numbers mentioned.
+
+### Step 2: Load the pending suggestions
+
+Read the suggestions list that was sent. The agent must keep track (in working memory or `last-cart.json`) of which numbered items were offered. Match the user's chosen numbers to the corresponding history items.
+
+### Step 3: Search and add the selected items
+
+For each selected history item:
+1. Search using the stored `searchTerm` (or `query` if `searchTerm` is absent):
+   ```bash
+   node "$API" search "<searchTerm>" "$AUTH"
+   ```
+2. Pick the best match (same logic as Mode 2 Step 3 — prefer discounted, prefer same product if `id` is in history).
+3. Add to cart:
+   ```bash
+   node "$API" add "<PRODUCT_ID>" 1 "$AUTH"
+   ```
+
+### Step 4: Report and update history
+
+Get the updated cart total:
+```bash
+node "$API" cart "$AUTH"
+```
+
+Send a confirmation:
+```
+mcp__nanoclaw__send_message(text: "✅ *Aggiunti anche:*\n• <product> €<price>\n...\n\n💰 *Nuovo totale: €<total>*\n\n📱 Apri l'app Picnic per scegliere la finestra di consegna e confermare l'ordine.")
+```
+
+Update `purchase-history.json` with the newly added items (increment their counts as in Mode 2 Step 7).
+
+---
+
+## Mode 5 — Clear Cart
 
 When user asks "svuota carrello", "clear cart":
 

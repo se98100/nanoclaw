@@ -88,8 +88,16 @@ function loadState(): void {
   const today = new Date().toISOString().split('T')[0];
   for (const [folder, entry] of Object.entries(sessions)) {
     if (entry.createdDate !== today) {
-      logger.info({ folder, sessionDate: entry.createdDate }, 'Startup: archiving stale session');
-      archiveSession(folder, entry.sessionId, ASSISTANT_NAME, entry.createdDate ?? undefined);
+      logger.info(
+        { folder, sessionDate: entry.createdDate },
+        'Startup: archiving stale session',
+      );
+      archiveSession(
+        folder,
+        entry.sessionId,
+        ASSISTANT_NAME,
+        entry.createdDate ?? undefined,
+      );
       // Mark as archived by clearing the stale date so runAgent will start fresh
       sessions[folder] = { sessionId: entry.sessionId, createdDate: null };
     }
@@ -294,7 +302,12 @@ async function runAgent(
       { group: group.name, sessionDate: sessionEntry.createdDate },
       'Day changed — archiving previous session before starting a new one',
     );
-    archiveSession(group.folder, sessionEntry.sessionId, ASSISTANT_NAME, sessionEntry.createdDate);
+    archiveSession(
+      group.folder,
+      sessionEntry.sessionId,
+      ASSISTANT_NAME,
+      sessionEntry.createdDate,
+    );
   }
   const sessionId = isStaleSession ? undefined : sessionEntry?.sessionId;
 
@@ -327,7 +340,10 @@ async function runAgent(
   const wrappedOnOutput = onOutput
     ? async (output: ContainerOutput) => {
         if (output.newSessionId) {
-          sessions[group.folder] = { sessionId: output.newSessionId, createdDate: today };
+          sessions[group.folder] = {
+            sessionId: output.newSessionId,
+            createdDate: today,
+          };
           setSession(group.folder, output.newSessionId, today);
         }
         await onOutput(output);
@@ -351,7 +367,10 @@ async function runAgent(
     );
 
     if (output.newSessionId) {
-      sessions[group.folder] = { sessionId: output.newSessionId, createdDate: today };
+      sessions[group.folder] = {
+        sessionId: output.newSessionId,
+        createdDate: today,
+      };
       setSession(group.folder, output.newSessionId, today);
     }
 
@@ -619,8 +638,7 @@ async function main(): Promise<void> {
     getAvailableGroups,
     writeGroupsSnapshot: (gf, im, ag, rj) =>
       writeGroupsSnapshot(gf, im, ag, rj),
-    writeTasksSnapshot: (gf, im, tasks) =>
-      writeTasksSnapshot(gf, im, tasks),
+    writeTasksSnapshot: (gf, im, tasks) => writeTasksSnapshot(gf, im, tasks),
   });
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();
